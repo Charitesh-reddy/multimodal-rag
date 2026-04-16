@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from google import genai
 from google.genai import types
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 load_dotenv()
 
@@ -69,15 +70,19 @@ class VQAGenerator:
                         types.Part.from_bytes(data=image_bytes, mime_type=mime)
                     )
 
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=parts,
-            )
+            response = self._call_api(parts)
             return response.text
 
         except Exception as e:
             logger.error(f"Generation error: {e}")
             return f"❌ Error: {str(e)}"
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=20))
+    def _call_api(self, parts):
+        return self.client.models.generate_content(
+            model=self.model,
+            contents=parts,
+        )
 
     @staticmethod
     def _mime(path: str) -> str:
